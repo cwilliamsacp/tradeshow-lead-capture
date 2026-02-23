@@ -1,7 +1,7 @@
 // ============================================================
 // Configuration — set your Google Apps Script deployment URL here
 // ============================================================
-const APPS_SCRIPT_URL = "YOUR_APPS_SCRIPT_URL_HERE";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwGH-V9K97Uu4aHRulaxkqlF-CSkbHYCUJDTj-_ZoB-XGvHtP4b37sH2uprP6hRzhCZ/exec";
 
 // ============================================================
 // DOM references
