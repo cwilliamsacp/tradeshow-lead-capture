@@ -75,9 +75,13 @@
       <h2>Review Lead Info</h2>
 
       <div id="line-picker" class="hidden">
-        <p class="picker-instructions">Tap a line to fill <strong id="picker-target">Name</strong></p>
+        <p class="picker-instructions">Select lines for <strong id="picker-target">Name</strong> <span class="picker-hint">(tap multiple if needed)</span></p>
+        <div id="picker-preview" class="picker-preview hidden"></div>
         <div id="ocr-lines"></div>
-        <button type="button" id="picker-skip" class="btn btn-secondary btn-small">Skip — type manually</button>
+        <div class="picker-actions">
+          <button type="button" id="picker-skip" class="btn btn-secondary">Skip</button>
+          <button type="button" id="picker-next" class="btn btn-primary hidden">Next: Company</button>
+        </div>
       </div>
 
       <form id="lead-form">

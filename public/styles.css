@@ -333,14 +333,30 @@ header h1 { font-size: 1.25rem; }
 .picker-instructions {
   font-size: 0.95rem;
   color: var(--gray-700);
-  margin-bottom: 12px;
+  margin-bottom: 6px;
+}
+
+.picker-hint {
+  font-size: 0.8rem;
+  color: var(--gray-500);
+  font-weight: normal;
+}
+
+.picker-preview {
+  background: #dbeafe;
+  color: var(--primary-dark);
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 10px;
 }
 
 #ocr-lines {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .ocr-line-btn {
@@ -356,14 +372,23 @@ header h1 { font-size: 1.25rem; }
   transition: border-color 0.15s, background 0.15s;
 }
 
-.ocr-line-btn:active {
+.ocr-line-btn.selected {
   background: #dbeafe;
   border-color: var(--primary);
 }
 
 .ocr-line-btn.used {
-  opacity: 0.4;
-  text-decoration: line-through;
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.picker-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.picker-actions .btn {
+  flex: 1;
 }
 
 #lead-form label {

@@ -151,28 +151,28 @@ async function captureImage() {
   // Draw cropped region
   cCtx.drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
 
-  // Binarize: convert to high-contrast black text on white background
+  // Grayscale + contrast stretch (let Tesseract handle its own binarization)
   const imageData = cCtx.getImageData(0, 0, cropW, cropH);
   const px = imageData.data;
 
-  // First pass: compute grayscale values and average for adaptive threshold
-  const grayValues = new Uint8Array(cropW * cropH);
-  let sum = 0;
+  // First pass: convert to grayscale and find min/max for contrast stretch
+  let minG = 255, maxG = 0;
   for (let i = 0; i < px.length; i += 4) {
     const gray = Math.round(px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114);
-    grayValues[i / 4] = gray;
-    sum += gray;
+    px[i] = gray;
+    px[i + 1] = gray;
+    px[i + 2] = gray;
+    if (gray < minG) minG = gray;
+    if (gray > maxG) maxG = gray;
   }
-  const avg = sum / grayValues.length;
-  // Threshold biased toward keeping dark text
-  const threshold = avg * 0.6;
 
-  // Second pass: binarize to pure black/white
+  // Second pass: stretch contrast to full 0–255 range
+  const range = maxG - minG || 1;
   for (let i = 0; i < px.length; i += 4) {
-    const val = grayValues[i / 4] < threshold ? 0 : 255;
-    px[i] = val;
-    px[i + 1] = val;
-    px[i + 2] = val;
+    const stretched = Math.round(((px[i] - minG) / range) * 255);
+    px[i] = stretched;
+    px[i + 1] = stretched;
+    px[i + 2] = stretched;
   }
   cCtx.putImageData(imageData, 0, 0);
 
@@ -191,12 +191,15 @@ async function captureImage() {
 // ============================================================
 // OCR
 // ============================================================
-const linePicker    = $("#line-picker");
-const ocrLinesDiv   = $("#ocr-lines");
-const pickerTarget  = $("#picker-target");
-const pickerSkipBtn = $("#picker-skip");
+const linePicker     = $("#line-picker");
+const ocrLinesDiv    = $("#ocr-lines");
+const pickerTarget   = $("#picker-target");
+const pickerPreview  = $("#picker-preview");
+const pickerSkipBtn  = $("#picker-skip");
+const pickerNextBtn  = $("#picker-next");
 
-let pickerPhase = ""; // "name" or "company"
+let pickerPhase = "";       // "name" or "company"
+let selectedLines = [];     // currently selected line texts for this phase
 
 async function runOCR(canvas) {
   processingOverlay.classList.remove("hidden");
@@ -231,7 +234,6 @@ async function runOCR(canvas) {
   if (lines.length > 0) {
     showLinePicker(lines);
   } else {
-    // No text found — go straight to manual form
     showManualForm();
     showToast("Could not read badge text. Please type manually.", "error");
   }
@@ -239,34 +241,79 @@ async function runOCR(canvas) {
 
 function showLinePicker(lines) {
   ocrLinesDiv.innerHTML = "";
-  lines.forEach((line) => {
+  selectedLines = [];
+
+  lines.forEach((line, idx) => {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "ocr-line-btn";
     btn.textContent = line;
-    btn.addEventListener("click", () => onLinePicked(btn, line));
+    btn.dataset.idx = idx;
+    btn.addEventListener("click", () => toggleLine(btn, line));
     ocrLinesDiv.appendChild(btn);
   });
 
   pickerPhase = "name";
   pickerTarget.textContent = "Name";
+  pickerNextBtn.textContent = "Next: Company";
+  pickerNextBtn.classList.add("hidden");
+  pickerPreview.classList.add("hidden");
   linePicker.classList.remove("hidden");
   leadForm.classList.add("hidden");
   reviewModal.classList.remove("hidden");
 }
 
-function onLinePicked(btn, text) {
-  btn.classList.add("used");
+function toggleLine(btn, text) {
+  if (btn.classList.contains("used")) return;
 
-  if (pickerPhase === "name") {
-    leadName.value = text;
-    pickerPhase = "company";
-    pickerTarget.textContent = "Company";
+  if (btn.classList.contains("selected")) {
+    // Deselect
+    btn.classList.remove("selected");
+    selectedLines = selectedLines.filter((t) => t !== text);
   } else {
-    leadCompany.value = text;
-    showManualForm();
+    // Select
+    btn.classList.add("selected");
+    selectedLines.push(text);
+  }
+
+  updatePickerPreview();
+}
+
+function updatePickerPreview() {
+  const combined = selectedLines.join(" ");
+  if (combined) {
+    pickerPreview.textContent = combined;
+    pickerPreview.classList.remove("hidden");
+    pickerNextBtn.classList.remove("hidden");
+  } else {
+    pickerPreview.classList.add("hidden");
+    pickerNextBtn.classList.add("hidden");
   }
 }
+
+pickerNextBtn.addEventListener("click", () => {
+  const combined = selectedLines.join(" ");
+
+  if (pickerPhase === "name") {
+    leadName.value = combined;
+
+    // Mark selected buttons as used, reset selection
+    ocrLinesDiv.querySelectorAll(".ocr-line-btn.selected").forEach((b) => {
+      b.classList.remove("selected");
+      b.classList.add("used");
+    });
+    selectedLines = [];
+
+    pickerPhase = "company";
+    pickerTarget.textContent = "Company";
+    pickerNextBtn.textContent = "Done";
+    pickerPreview.classList.add("hidden");
+    pickerNextBtn.classList.add("hidden");
+  } else {
+    leadCompany.value = combined;
+    showManualForm();
+  }
+});
 
 function showManualForm() {
   linePicker.classList.add("hidden");
@@ -275,7 +322,20 @@ function showManualForm() {
   leadName.focus();
 }
 
-pickerSkipBtn.addEventListener("click", showManualForm);
+pickerSkipBtn.addEventListener("click", () => {
+  if (pickerPhase === "name") {
+    // Skip name, move to company
+    pickerPhase = "company";
+    pickerTarget.textContent = "Company";
+    pickerNextBtn.textContent = "Done";
+    selectedLines = [];
+    pickerPreview.classList.add("hidden");
+    pickerNextBtn.classList.add("hidden");
+  } else {
+    // Skip company, go to form
+    showManualForm();
+  }
+});
 
 // ============================================================
 // Review Form
