@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Lead Capture</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Screen 1: Staff Name Setup -->
+  <div id="setup-screen" class="screen">
+    <div class="setup-container">
+      <h1>Lead Capture</h1>
+      <p>Enter your name to get started. This identifies who scanned each lead.</p>
+      <input type="text" id="staff-name-input" placeholder="Your name" autocomplete="name">
+      <button id="staff-name-submit" class="btn btn-primary">Get Started</button>
+    </div>
+  </div>
+
+  <!-- Screen 2: Main Screen -->
+  <div id="main-screen" class="screen hidden">
+    <header>
+      <h1>Lead Capture</h1>
+      <div class="staff-badge" id="staff-badge"></div>
+    </header>
+
+    <button id="scan-btn" class="btn btn-scan">Scan Badge</button>
+
+    <div id="offline-banner" class="offline-banner hidden">
+      Offline — scans will be saved and sent when reconnected
+    </div>
+
+    <div id="recent-scans">
+      <h2>Recent Scans</h2>
+      <ul id="scans-list">
+        <li class="empty-state">No scans yet. Tap "Scan Badge" to start.</li>
+      </ul>
+    </div>
+
+    <div id="queue-status" class="hidden">
+      <span id="queue-count"></span> pending submission(s)
+      <button id="retry-queue-btn" class="btn btn-small">Retry Now</button>
+    </div>
+  </div>
+
+  <!-- Camera Modal -->
+  <div id="camera-modal" class="modal hidden">
+    <div class="camera-container">
+      <video id="camera-feed" autoplay playsinline></video>
+      <div class="crop-guide">
+        <div class="crop-guide-border"></div>
+        <p class="crop-hint">Align badge text inside the box</p>
+      </div>
+      <div class="camera-controls">
+        <button id="camera-cancel" class="btn btn-secondary">Cancel</button>
+        <button id="camera-capture" class="btn btn-capture">Capture</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Processing Overlay -->
+  <div id="processing-overlay" class="modal hidden">
+    <div class="processing-content">
+      <div class="spinner"></div>
+      <p>Reading badge text...</p>
+    </div>
+  </div>
+
+  <!-- Review/Edit Form Modal -->
+  <div id="review-modal" class="modal hidden">
+    <div class="review-container">
+      <h2>Review Lead Info</h2>
+      <form id="lead-form">
+        <label for="lead-name">Name</label>
+        <input type="text" id="lead-name" placeholder="Attendee name" required>
+
+        <label for="lead-company">Company</label>
+        <input type="text" id="lead-company" placeholder="Company name">
+
+        <label for="lead-notes">Notes</label>
+        <textarea id="lead-notes" placeholder="Interest, follow-up action, etc." rows="3"></textarea>
+
+        <div class="form-actions">
+          <button type="button" id="review-cancel" class="btn btn-secondary">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Lead</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Hidden canvas for image capture -->
+  <canvas id="capture-canvas" class="hidden"></canvas>
+
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "tradeshow-lead-capture",
+  "version": "1.0.0",
+  "description": "Mobile badge scanner for tradeshow lead capture",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}
