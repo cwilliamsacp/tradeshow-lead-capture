@@ -191,75 +191,99 @@ async function captureImage() {
 // ============================================================
 // OCR
 // ============================================================
+const linePicker    = $("#line-picker");
+const ocrLinesDiv   = $("#ocr-lines");
+const pickerTarget  = $("#picker-target");
+const pickerSkipBtn = $("#picker-skip");
+
+let pickerPhase = ""; // "name" or "company"
+
 async function runOCR(canvas) {
   processingOverlay.classList.remove("hidden");
 
+  let lines = [];
   try {
     if (!tesseractWorker) {
       await initTesseract();
     }
 
     await tesseractWorker.setParameters({
-      tessedit_pageseg_mode: "6",         // Assume a single uniform block of text
+      tessedit_pageseg_mode: "6",
       tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,-'&@/",
     });
     const { data } = await tesseractWorker.recognize(canvas);
-    const parsed = parseOCRText(data.text);
 
-    leadName.value = parsed.name;
-    leadCompany.value = parsed.company;
-    leadNotes.value = "";
+    lines = data.text
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l.length > 1 && !/^\d+$/.test(l));
   } catch (err) {
     console.error("OCR error:", err);
-    leadName.value = "";
-    leadCompany.value = "";
-    leadNotes.value = "";
-    showToast("Could not read badge text. Please type manually.", "error");
   }
 
   processingOverlay.classList.add("hidden");
+
+  // Reset form
+  leadName.value = "";
+  leadCompany.value = "";
+  leadNotes.value = "";
+
+  if (lines.length > 0) {
+    showLinePicker(lines);
+  } else {
+    // No text found — go straight to manual form
+    showManualForm();
+    showToast("Could not read badge text. Please type manually.", "error");
+  }
+}
+
+function showLinePicker(lines) {
+  ocrLinesDiv.innerHTML = "";
+  lines.forEach((line) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ocr-line-btn";
+    btn.textContent = line;
+    btn.addEventListener("click", () => onLinePicked(btn, line));
+    ocrLinesDiv.appendChild(btn);
+  });
+
+  pickerPhase = "name";
+  pickerTarget.textContent = "Name";
+  linePicker.classList.remove("hidden");
+  leadForm.classList.add("hidden");
+  reviewModal.classList.remove("hidden");
+}
+
+function onLinePicked(btn, text) {
+  btn.classList.add("used");
+
+  if (pickerPhase === "name") {
+    leadName.value = text;
+    pickerPhase = "company";
+    pickerTarget.textContent = "Company";
+  } else {
+    leadCompany.value = text;
+    showManualForm();
+  }
+}
+
+function showManualForm() {
+  linePicker.classList.add("hidden");
+  leadForm.classList.remove("hidden");
   reviewModal.classList.remove("hidden");
   leadName.focus();
 }
 
-function parseOCRText(raw) {
-  // Split into non-empty lines and trim whitespace
-  const lines = raw
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 1);
-
-  let name = "";
-  let company = "";
-
-  // Common badge layout: Name on first prominent line, Company on second
-  // Heuristic: skip very short tokens and lines that look like titles/roles
-  const rolePrefixes = /^(mr|ms|mrs|dr|prof|director|manager|vp|ceo|cto|cfo|coo|evp|svp|sr|jr|eng)/i;
-
-  for (const line of lines) {
-    // Skip lines that are just numbers or very short
-    if (/^\d+$/.test(line)) continue;
-
-    if (!name) {
-      // First meaningful line is likely the name
-      if (!rolePrefixes.test(line) || line.split(/\s+/).length > 1) {
-        name = line;
-      }
-    } else if (!company) {
-      // Second meaningful line is likely the company
-      company = line;
-      break;
-    }
-  }
-
-  return { name, company };
-}
+pickerSkipBtn.addEventListener("click", showManualForm);
 
 // ============================================================
 // Review Form
 // ============================================================
 reviewCancelBtn.addEventListener("click", () => {
   reviewModal.classList.add("hidden");
+  linePicker.classList.add("hidden");
+  leadForm.classList.remove("hidden");
 });
 
 leadForm.addEventListener("submit", async (e) => {

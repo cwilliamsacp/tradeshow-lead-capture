@@ -73,6 +73,13 @@
   <div id="review-modal" class="modal hidden">
     <div class="review-container">
       <h2>Review Lead Info</h2>
+
+      <div id="line-picker" class="hidden">
+        <p class="picker-instructions">Tap a line to fill <strong id="picker-target">Name</strong></p>
+        <div id="ocr-lines"></div>
+        <button type="button" id="picker-skip" class="btn btn-secondary btn-small">Skip — type manually</button>
+      </div>
+
       <form id="lead-form">
         <label for="lead-name">Name</label>
         <input type="text" id="lead-name" placeholder="Attendee name" required>
