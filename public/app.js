@@ -137,9 +137,9 @@ async function captureImage() {
   const ctx = canvas.getContext("2d");
   ctx.drawImage(video, 0, 0);
 
-  // Crop to center region matching the guide overlay (85% width, 30% height)
+  // Crop to center region matching the guide overlay (85% width, 50% height)
   const cropW = Math.round(canvas.width * 0.85);
-  const cropH = Math.round(canvas.height * 0.30);
+  const cropH = Math.round(canvas.height * 0.50);
   const cropX = Math.round((canvas.width - cropW) / 2);
   const cropY = Math.round((canvas.height - cropH) / 2);
 
@@ -151,19 +151,41 @@ async function captureImage() {
   // Draw cropped region
   cCtx.drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
 
-  // Convert to grayscale for better OCR
+  // Binarize: convert to high-contrast black text on white background
   const imageData = cCtx.getImageData(0, 0, cropW, cropH);
-  const data = imageData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-    data[i] = gray;
-    data[i + 1] = gray;
-    data[i + 2] = gray;
+  const px = imageData.data;
+
+  // First pass: compute grayscale values and average for adaptive threshold
+  const grayValues = new Uint8Array(cropW * cropH);
+  let sum = 0;
+  for (let i = 0; i < px.length; i += 4) {
+    const gray = Math.round(px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114);
+    grayValues[i / 4] = gray;
+    sum += gray;
+  }
+  const avg = sum / grayValues.length;
+  // Threshold biased toward keeping dark text
+  const threshold = avg * 0.6;
+
+  // Second pass: binarize to pure black/white
+  for (let i = 0; i < px.length; i += 4) {
+    const val = grayValues[i / 4] < threshold ? 0 : 255;
+    px[i] = val;
+    px[i + 1] = val;
+    px[i + 2] = val;
   }
   cCtx.putImageData(imageData, 0, 0);
 
+  // Scale up 2x for better OCR on small text
+  const scaled = document.createElement("canvas");
+  scaled.width = cropW * 2;
+  scaled.height = cropH * 2;
+  const sCtx = scaled.getContext("2d");
+  sCtx.imageSmoothingEnabled = false;
+  sCtx.drawImage(cropped, 0, 0, scaled.width, scaled.height);
+
   closeCamera();
-  await runOCR(cropped);
+  await runOCR(scaled);
 }
 
 // ============================================================
@@ -177,6 +199,10 @@ async function runOCR(canvas) {
       await initTesseract();
     }
 
+    await tesseractWorker.setParameters({
+      tessedit_pageseg_mode: "6",         // Assume a single uniform block of text
+      tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,-'&@/",
+    });
     const { data } = await tesseractWorker.recognize(canvas);
     const parsed = parseOCRText(data.text);
 

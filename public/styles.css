@@ -254,7 +254,7 @@ header h1 { font-size: 1.25rem; }
 
 .crop-guide-border {
   width: 85%;
-  height: 30%;
+  height: 50%;
   border: 3px solid rgba(255,255,255,0.8);
   border-radius: 12px;
 }
