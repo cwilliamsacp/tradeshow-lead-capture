@@ -1,7 +1,22 @@
 // ============================================================
 // Configuration — set your Google Apps Script deployment URL here
 // ============================================================
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwGH-V9K97Uu4aHRulaxkqlF-CSkbHYCUJDTj-_ZoB-XGvHtP4b37sH2uprP6hRzhCZ/exec";
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzlGTUNCsagN0ucklS63INQlHU1Z5sq8SoaTuvBTxoPuPkL0YKHNUmQ5PmXoGE5nCBK/exec";
+
+// ============================================================
+// Products / Services — customize this list for your booth
+// ============================================================
+const PRODUCTS = [
+  "Copiers",
+  "Interactive Displays",
+  "Phones",
+  "Security Cameras",
+  "Access Control",
+  "Managed IT Services",
+  "AI",
+  "Custom Apparel",
+  "Custom Merch",
+];
 
 // ============================================================
 // DOM references
@@ -12,38 +27,30 @@ const setupScreen    = $("#setup-screen");
 const mainScreen     = $("#main-screen");
 const staffInput     = $("#staff-name-input");
 const staffSubmitBtn = $("#staff-name-submit");
-const staffBadge     = $("#staff-badge");
-const scanBtn        = $("#scan-btn");
-const scansList      = $("#scans-list");
+const staffBadge     = $("#change-staff");
 const offlineBanner  = $("#offline-banner");
 const queueStatus    = $("#queue-status");
 const queueCount     = $("#queue-count");
 const retryQueueBtn  = $("#retry-queue-btn");
 
-const cameraModal    = $("#camera-modal");
-const cameraFeed     = $("#camera-feed");
-const captureBtn     = $("#camera-capture");
-const cameraCancelBtn = $("#camera-cancel");
-
-const processingOverlay = $("#processing-overlay");
-
-const reviewModal    = $("#review-modal");
 const leadForm       = $("#lead-form");
 const leadName       = $("#lead-name");
 const leadCompany    = $("#lead-company");
+const leadEmail      = $("#lead-email");
+const leadPhone      = $("#lead-phone");
+const ratingGroup    = $("#rating-group");
+const selectedProductsDiv = $("#selected-products");
 const leadNotes      = $("#lead-notes");
-const reviewCancelBtn = $("#review-cancel");
-
-const captureCanvas  = $("#capture-canvas");
+const leadsList      = $("#leads-list");
 
 // ============================================================
 // State
 // ============================================================
 let staffName = localStorage.getItem("staffName") || "";
-let recentScans = JSON.parse(localStorage.getItem("recentScans") || "[]");
+let recentLeads = JSON.parse(localStorage.getItem("recentLeads") || "[]");
 let offlineQueue = JSON.parse(localStorage.getItem("offlineQueue") || "[]");
-let cameraStream = null;
-let tesseractWorker = null;
+let selectedRating = "";
+let selectedProducts = new Set();
 
 // ============================================================
 // Initialization
@@ -55,26 +62,13 @@ function init() {
     setupScreen.classList.remove("hidden");
   }
 
-  renderRecentScans();
+  buildProductTags();
+  renderRecentLeads();
   updateQueueStatus();
-  initTesseract();
 
   window.addEventListener("online", onOnline);
   window.addEventListener("offline", onOffline);
   if (!navigator.onLine) onOffline();
-}
-
-// ============================================================
-// Tesseract — pre-initialize worker for faster scans
-// ============================================================
-async function initTesseract() {
-  try {
-    tesseractWorker = await Tesseract.createWorker("eng", 1, {
-      logger: () => {},
-    });
-  } catch (err) {
-    console.error("Tesseract init failed:", err);
-  }
 }
 
 // ============================================================
@@ -99,278 +93,139 @@ function showMainScreen() {
   staffBadge.textContent = staffName;
 }
 
-// ============================================================
-// Camera
-// ============================================================
-scanBtn.addEventListener("click", openCamera);
-cameraCancelBtn.addEventListener("click", closeCamera);
-captureBtn.addEventListener("click", captureImage);
-
-async function openCamera() {
-  try {
-    cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: "environment", width: { ideal: 1920 }, height: { ideal: 1080 } },
-      audio: false,
-    });
-    cameraFeed.srcObject = cameraStream;
-    cameraModal.classList.remove("hidden");
-  } catch (err) {
-    showToast("Camera access denied. Check browser permissions.", "error");
+staffBadge.addEventListener("click", () => {
+  const newName = prompt("Change staff name:", staffName);
+  if (newName && newName.trim()) {
+    staffName = newName.trim();
+    localStorage.setItem("staffName", staffName);
+    staffBadge.textContent = staffName;
   }
-}
-
-function closeCamera() {
-  if (cameraStream) {
-    cameraStream.getTracks().forEach((t) => t.stop());
-    cameraStream = null;
-  }
-  cameraFeed.srcObject = null;
-  cameraModal.classList.add("hidden");
-}
-
-async function captureImage() {
-  const video = cameraFeed;
-  const canvas = captureCanvas;
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
-
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(video, 0, 0);
-
-  // Crop to center region matching the guide overlay (85% width, 50% height)
-  const cropW = Math.round(canvas.width * 0.85);
-  const cropH = Math.round(canvas.height * 0.50);
-  const cropX = Math.round((canvas.width - cropW) / 2);
-  const cropY = Math.round((canvas.height - cropH) / 2);
-
-  const cropped = document.createElement("canvas");
-  cropped.width = cropW;
-  cropped.height = cropH;
-  const cCtx = cropped.getContext("2d");
-
-  // Draw cropped region
-  cCtx.drawImage(canvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-
-  // Grayscale + contrast stretch (let Tesseract handle its own binarization)
-  const imageData = cCtx.getImageData(0, 0, cropW, cropH);
-  const px = imageData.data;
-
-  // First pass: convert to grayscale and find min/max for contrast stretch
-  let minG = 255, maxG = 0;
-  for (let i = 0; i < px.length; i += 4) {
-    const gray = Math.round(px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114);
-    px[i] = gray;
-    px[i + 1] = gray;
-    px[i + 2] = gray;
-    if (gray < minG) minG = gray;
-    if (gray > maxG) maxG = gray;
-  }
-
-  // Second pass: stretch contrast to full 0–255 range
-  const range = maxG - minG || 1;
-  for (let i = 0; i < px.length; i += 4) {
-    const stretched = Math.round(((px[i] - minG) / range) * 255);
-    px[i] = stretched;
-    px[i + 1] = stretched;
-    px[i + 2] = stretched;
-  }
-  cCtx.putImageData(imageData, 0, 0);
-
-  // Scale up 2x for better OCR on small text
-  const scaled = document.createElement("canvas");
-  scaled.width = cropW * 2;
-  scaled.height = cropH * 2;
-  const sCtx = scaled.getContext("2d");
-  sCtx.imageSmoothingEnabled = false;
-  sCtx.drawImage(cropped, 0, 0, scaled.width, scaled.height);
-
-  closeCamera();
-  await runOCR(scaled);
-}
+});
 
 // ============================================================
-// OCR
+// Rating Buttons
 // ============================================================
-const linePicker     = $("#line-picker");
-const ocrLinesDiv    = $("#ocr-lines");
-const pickerTarget   = $("#picker-target");
-const pickerPreview  = $("#picker-preview");
-const pickerSkipBtn  = $("#picker-skip");
-const pickerNextBtn  = $("#picker-next");
+ratingGroup.addEventListener("click", (e) => {
+  const btn = e.target.closest(".rating-btn");
+  if (!btn) return;
 
-let pickerPhase = "";       // "name" or "company"
-let selectedLines = [];     // currently selected line texts for this phase
+  const rating = btn.dataset.rating;
 
-async function runOCR(canvas) {
-  processingOverlay.classList.remove("hidden");
-
-  let lines = [];
-  try {
-    if (!tesseractWorker) {
-      await initTesseract();
-    }
-
-    await tesseractWorker.setParameters({
-      tessedit_pageseg_mode: "6",
-      tessedit_char_whitelist: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,-'&@/",
-    });
-    const { data } = await tesseractWorker.recognize(canvas);
-
-    lines = data.text
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => l.length > 1 && !/^\d+$/.test(l));
-  } catch (err) {
-    console.error("OCR error:", err);
+  // Toggle off if already selected
+  if (selectedRating === rating) {
+    selectedRating = "";
+    btn.classList.remove("active");
+    return;
   }
 
-  processingOverlay.classList.add("hidden");
+  selectedRating = rating;
+  ratingGroup.querySelectorAll(".rating-btn").forEach((b) => b.classList.remove("active"));
+  btn.classList.add("active");
+});
 
-  // Reset form
-  leadName.value = "";
-  leadCompany.value = "";
-  leadNotes.value = "";
+// ============================================================
+// Product Tags
+// ============================================================
+let otherInput = null;
 
-  if (lines.length > 0) {
-    showLinePicker(lines);
-  } else {
-    showManualForm();
-    showToast("Could not read badge text. Please type manually.", "error");
-  }
-}
-
-function showLinePicker(lines) {
-  ocrLinesDiv.innerHTML = "";
-  selectedLines = [];
-
-  lines.forEach((line, idx) => {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "ocr-line-btn";
-    btn.textContent = line;
-    btn.dataset.idx = idx;
-    btn.addEventListener("click", () => toggleLine(btn, line));
-    ocrLinesDiv.appendChild(btn);
+function buildProductTags() {
+  selectedProductsDiv.textContent = "";
+  PRODUCTS.forEach((product) => {
+    const tag = document.createElement("span");
+    tag.className = "product-tag";
+    tag.textContent = product;
+    tag.addEventListener("click", () => toggleProduct(tag, product));
+    selectedProductsDiv.appendChild(tag);
   });
 
-  pickerPhase = "name";
-  pickerTarget.textContent = "Name";
-  pickerNextBtn.textContent = "Next: Company";
-  pickerNextBtn.classList.add("hidden");
-  pickerPreview.classList.add("hidden");
-  linePicker.classList.remove("hidden");
-  leadForm.classList.add("hidden");
-  reviewModal.classList.remove("hidden");
+  // "Other" tag with fillable field
+  const otherTag = document.createElement("span");
+  otherTag.className = "product-tag";
+  otherTag.textContent = "Other";
+  otherTag.addEventListener("click", () => {
+    const isActive = otherTag.classList.toggle("active");
+    if (isActive) {
+      otherInput.classList.remove("hidden");
+      otherInput.focus();
+    } else {
+      otherInput.classList.add("hidden");
+      otherInput.value = "";
+    }
+  });
+  selectedProductsDiv.appendChild(otherTag);
+
+  otherInput = document.createElement("input");
+  otherInput.type = "text";
+  otherInput.className = "other-product-input hidden";
+  otherInput.placeholder = "Specify other product/service";
+  selectedProductsDiv.parentNode.insertBefore(otherInput, selectedProductsDiv.nextSibling);
 }
 
-function toggleLine(btn, text) {
-  if (btn.classList.contains("used")) return;
-
-  if (btn.classList.contains("selected")) {
-    // Deselect
-    btn.classList.remove("selected");
-    selectedLines = selectedLines.filter((t) => t !== text);
+function toggleProduct(tag, product) {
+  if (selectedProducts.has(product)) {
+    selectedProducts.delete(product);
+    tag.classList.remove("active");
   } else {
-    // Select
-    btn.classList.add("selected");
-    selectedLines.push(text);
-  }
-
-  updatePickerPreview();
-}
-
-function updatePickerPreview() {
-  const combined = selectedLines.join(" ");
-  if (combined) {
-    pickerPreview.textContent = combined;
-    pickerPreview.classList.remove("hidden");
-    pickerNextBtn.classList.remove("hidden");
-  } else {
-    pickerPreview.classList.add("hidden");
-    pickerNextBtn.classList.add("hidden");
+    selectedProducts.add(product);
+    tag.classList.add("active");
   }
 }
 
-pickerNextBtn.addEventListener("click", () => {
-  const combined = selectedLines.join(" ");
-
-  if (pickerPhase === "name") {
-    leadName.value = combined;
-
-    // Mark selected buttons as used, reset selection
-    ocrLinesDiv.querySelectorAll(".ocr-line-btn.selected").forEach((b) => {
-      b.classList.remove("selected");
-      b.classList.add("used");
-    });
-    selectedLines = [];
-
-    pickerPhase = "company";
-    pickerTarget.textContent = "Company";
-    pickerNextBtn.textContent = "Done";
-    pickerPreview.classList.add("hidden");
-    pickerNextBtn.classList.add("hidden");
-  } else {
-    leadCompany.value = combined;
-    showManualForm();
+function getSelectedProducts() {
+  const products = [...selectedProducts];
+  if (otherInput && otherInput.value.trim()) {
+    products.push("Other: " + otherInput.value.trim());
   }
-});
-
-function showManualForm() {
-  linePicker.classList.add("hidden");
-  leadForm.classList.remove("hidden");
-  reviewModal.classList.remove("hidden");
-  leadName.focus();
+  return products.join(", ");
 }
 
-pickerSkipBtn.addEventListener("click", () => {
-  if (pickerPhase === "name") {
-    // Skip name, move to company
-    pickerPhase = "company";
-    pickerTarget.textContent = "Company";
-    pickerNextBtn.textContent = "Done";
-    selectedLines = [];
-    pickerPreview.classList.add("hidden");
-    pickerNextBtn.classList.add("hidden");
-  } else {
-    // Skip company, go to form
-    showManualForm();
+function resetProductTags() {
+  selectedProducts.clear();
+  selectedProductsDiv.querySelectorAll(".product-tag").forEach((t) => t.classList.remove("active"));
+  if (otherInput) {
+    otherInput.value = "";
+    otherInput.classList.add("hidden");
   }
-});
+}
 
 // ============================================================
-// Review Form
+// Form Submission
 // ============================================================
-reviewCancelBtn.addEventListener("click", () => {
-  reviewModal.classList.add("hidden");
-  linePicker.classList.add("hidden");
-  leadForm.classList.remove("hidden");
-});
-
 leadForm.addEventListener("submit", async (e) => {
   e.preventDefault();
 
   const leadData = {
     name: leadName.value.trim(),
     company: leadCompany.value.trim(),
+    email: leadEmail.value.trim(),
+    phone: leadPhone.value.trim(),
+    rating: selectedRating,
+    products: getSelectedProducts(),
     notes: leadNotes.value.trim(),
-    scannedBy: staffName,
+    capturedBy: staffName,
     timestamp: new Date().toISOString(),
   };
 
   if (!leadData.name) {
     showToast("Name is required.", "error");
+    leadName.focus();
     return;
   }
 
-  reviewModal.classList.add("hidden");
+  // Save to recent leads immediately
+  addRecentLead(leadData, false);
 
-  // Save to recent scans immediately
-  addRecentScan(leadData, false);
+  // Reset form
+  leadForm.reset();
+  selectedRating = "";
+  ratingGroup.querySelectorAll(".rating-btn").forEach((b) => b.classList.remove("active"));
+  resetProductTags();
+  leadName.focus();
 
   // Try to submit
   const sent = await submitLead(leadData);
   if (sent) {
-    markScanSent(leadData.timestamp);
+    markLeadSent(leadData.timestamp);
     showToast("Lead saved!");
   } else {
     addToQueue(leadData);
@@ -390,13 +245,12 @@ async function submitLead(data) {
   if (!navigator.onLine) return false;
 
   try {
-    const res = await fetch(APPS_SCRIPT_URL, {
+    await fetch(APPS_SCRIPT_URL, {
       method: "POST",
       headers: { "Content-Type": "text/plain" },
       body: JSON.stringify(data),
       mode: "no-cors",
     });
-    // no-cors means we can't read the response, but the request was sent
     return true;
   } catch (err) {
     console.error("Submit failed:", err);
@@ -421,7 +275,7 @@ async function flushQueue() {
   for (const item of offlineQueue) {
     const sent = await submitLead(item);
     if (sent) {
-      markScanSent(item.timestamp);
+      markLeadSent(item.timestamp);
     } else {
       remaining.push(item);
     }
@@ -431,7 +285,7 @@ async function flushQueue() {
   localStorage.setItem("offlineQueue", JSON.stringify(offlineQueue));
   updateQueueStatus();
 
-  if (remaining.length === 0 && offlineQueue.length === 0) {
+  if (remaining.length === 0) {
     showToast("All queued leads submitted!");
   }
 }
@@ -448,42 +302,69 @@ function updateQueueStatus() {
 retryQueueBtn.addEventListener("click", flushQueue);
 
 // ============================================================
-// Recent Scans List
+// Recent Leads List
 // ============================================================
-function addRecentScan(data, sent) {
-  recentScans.unshift({ ...data, sent });
-  if (recentScans.length > 50) recentScans = recentScans.slice(0, 50);
-  localStorage.setItem("recentScans", JSON.stringify(recentScans));
-  renderRecentScans();
+function addRecentLead(data, sent) {
+  recentLeads.unshift({ ...data, sent });
+  if (recentLeads.length > 50) recentLeads = recentLeads.slice(0, 50);
+  localStorage.setItem("recentLeads", JSON.stringify(recentLeads));
+  renderRecentLeads();
 }
 
-function markScanSent(timestamp) {
-  const scan = recentScans.find((s) => s.timestamp === timestamp);
-  if (scan) {
-    scan.sent = true;
-    localStorage.setItem("recentScans", JSON.stringify(recentScans));
-    renderRecentScans();
+function markLeadSent(timestamp) {
+  const lead = recentLeads.find((l) => l.timestamp === timestamp);
+  if (lead) {
+    lead.sent = true;
+    localStorage.setItem("recentLeads", JSON.stringify(recentLeads));
+    renderRecentLeads();
   }
 }
 
-function renderRecentScans() {
-  if (recentScans.length === 0) {
-    scansList.innerHTML = '<li class="empty-state">No scans yet. Tap "Scan Badge" to start.</li>';
+function renderRecentLeads() {
+  leadsList.textContent = "";
+
+  if (recentLeads.length === 0) {
+    const li = document.createElement("li");
+    li.className = "empty-state";
+    li.textContent = "No leads captured yet.";
+    leadsList.appendChild(li);
     return;
   }
 
-  scansList.innerHTML = recentScans
-    .map(
-      (s) => `
-    <li>
-      <div class="scan-item-name">${escapeHTML(s.name)}</div>
-      ${s.company ? `<div class="scan-item-company">${escapeHTML(s.company)}</div>` : ""}
-      <div class="scan-item-status ${s.sent ? "sent" : "queued"}">
-        ${s.sent ? "Sent to sheet" : "Queued"}
-      </div>
-    </li>`
-    )
-    .join("");
+  recentLeads.forEach((l) => {
+    const li = document.createElement("li");
+
+    const header = document.createElement("div");
+    header.className = "lead-item-header";
+
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "lead-item-name";
+    nameSpan.textContent = l.name;
+    header.appendChild(nameSpan);
+
+    if (l.rating) {
+      const ratingSpan = document.createElement("span");
+      ratingSpan.className = "lead-item-rating " + l.rating.toLowerCase();
+      ratingSpan.textContent = l.rating;
+      header.appendChild(ratingSpan);
+    }
+
+    li.appendChild(header);
+
+    if (l.company) {
+      const companyDiv = document.createElement("div");
+      companyDiv.className = "lead-item-company";
+      companyDiv.textContent = l.company;
+      li.appendChild(companyDiv);
+    }
+
+    const statusDiv = document.createElement("div");
+    statusDiv.className = "lead-item-status " + (l.sent ? "sent" : "queued");
+    statusDiv.textContent = l.sent ? "Sent to sheet" : "Queued";
+    li.appendChild(statusDiv);
+
+    leadsList.appendChild(li);
+  });
 }
 
 // ============================================================
@@ -506,20 +387,11 @@ function showToast(message, type = "success") {
   if (existing) existing.remove();
 
   const toast = document.createElement("div");
-  toast.className = `toast ${type}`;
+  toast.className = "toast " + type;
   toast.textContent = message;
   document.body.appendChild(toast);
 
   setTimeout(() => toast.remove(), 3000);
-}
-
-// ============================================================
-// Utility
-// ============================================================
-function escapeHTML(str) {
-  const div = document.createElement("div");
-  div.textContent = str;
-  return div.innerHTML;
 }
 
 // ============================================================

@@ -1,31 +1,44 @@
 // ============================================================
-// Google Apps Script — paste this into a new project at
+// Google Apps Script — paste this into your existing project at
 // https://script.google.com
 //
 // Setup:
-//   1. Go to https://script.google.com → New project
+//   1. Go to your existing Apps Script project
 //   2. Replace all code with this file's contents
-//   3. Deploy → New deployment → Web app
-//      - Execute as: Me
-//      - Who has access: Anyone
-//   4. Copy the deployment URL into app.js (APPS_SCRIPT_URL)
-//   5. Make sure your sheet has headers in Row 1:
-//      Timestamp | Name | Company | Notes | Scanned By
+//   3. Deploy → Manage deployments → Edit → New version
+//   4. In your Google Sheet, create a new tab called "Leads"
+//   5. Add these headers in Row 1 of the "Leads" tab:
+//      Timestamp | Name | Company | Email | Phone | Rating | Products | Notes | Captured By
 // ============================================================
 
 var SHEET_ID = "1d-x3AP0K0ZBI6BzjC7OSBcrShSdugHTTu_JAo7xsqo4";
+var TAB_NAME = "Leads";
 
 function doPost(e) {
   try {
-    var sheet = SpreadsheetApp.openById(SHEET_ID).getActiveSheet();
+    var ss = SpreadsheetApp.openById(SHEET_ID);
+    var sheet = ss.getSheetByName(TAB_NAME);
+
+    if (!sheet) {
+      sheet = ss.insertSheet(TAB_NAME);
+      sheet.appendRow([
+        "Timestamp", "Name", "Company", "Email", "Phone",
+        "Rating", "Products", "Notes", "Captured By"
+      ]);
+    }
+
     var data = JSON.parse(e.postData.contents);
 
     sheet.appendRow([
       new Date().toLocaleString(),
       data.name || "",
       data.company || "",
+      data.email || "",
+      data.phone || "",
+      data.rating || "",
+      data.products || "",
       data.notes || "",
-      data.scannedBy || ""
+      data.capturedBy || ""
     ]);
 
     return ContentService

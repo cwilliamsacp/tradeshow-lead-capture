@@ -14,7 +14,7 @@
   <div id="setup-screen" class="screen">
     <div class="setup-container">
       <h1>Lead Capture</h1>
-      <p>Enter your name to get started. This identifies who scanned each lead.</p>
+      <p>Enter your name to get started. This identifies who captured each lead.</p>
       <input type="text" id="staff-name-input" placeholder="Your name" autocomplete="name">
       <button id="staff-name-submit" class="btn btn-primary">Get Started</button>
     </div>
@@ -24,88 +24,57 @@
   <div id="main-screen" class="screen hidden">
     <header>
       <h1>Lead Capture</h1>
-      <div class="staff-badge" id="staff-badge"></div>
+      <button id="change-staff" class="staff-badge" title="Tap to change"></button>
     </header>
 
-    <button id="scan-btn" class="btn btn-scan">Scan Badge</button>
-
     <div id="offline-banner" class="offline-banner hidden">
-      Offline — scans will be saved and sent when reconnected
-    </div>
-
-    <div id="recent-scans">
-      <h2>Recent Scans</h2>
-      <ul id="scans-list">
-        <li class="empty-state">No scans yet. Tap "Scan Badge" to start.</li>
-      </ul>
+      Offline — leads will be saved and sent when reconnected
     </div>
 
     <div id="queue-status" class="hidden">
       <span id="queue-count"></span> pending submission(s)
       <button id="retry-queue-btn" class="btn btn-small">Retry Now</button>
     </div>
-  </div>
 
-  <!-- Camera Modal -->
-  <div id="camera-modal" class="modal hidden">
-    <div class="camera-container">
-      <video id="camera-feed" autoplay playsinline></video>
-      <div class="crop-guide">
-        <div class="crop-guide-border"></div>
-        <p class="crop-hint">Align badge text inside the box</p>
+    <!-- Lead Entry Form -->
+    <form id="lead-form">
+      <label for="lead-name">Name <span class="required">*</span></label>
+      <input type="text" id="lead-name" placeholder="Contact name" required autocomplete="off">
+
+      <label for="lead-company">Company</label>
+      <input type="text" id="lead-company" placeholder="Company name" autocomplete="off">
+
+      <label for="lead-email">Email</label>
+      <input type="email" id="lead-email" placeholder="email@company.com" autocomplete="off">
+
+      <label for="lead-phone">Phone</label>
+      <input type="tel" id="lead-phone" placeholder="Phone number" autocomplete="off">
+
+      <label>Lead Rating</label>
+      <div id="rating-group" class="rating-group">
+        <button type="button" class="rating-btn" data-rating="Hot">Hot</button>
+        <button type="button" class="rating-btn" data-rating="Warm">Warm</button>
+        <button type="button" class="rating-btn" data-rating="Cold">Cold</button>
       </div>
-      <div class="camera-controls">
-        <button id="camera-cancel" class="btn btn-secondary">Cancel</button>
-        <button id="camera-capture" class="btn btn-capture">Capture</button>
-      </div>
+
+      <label>Products / Services</label>
+      <div id="selected-products" class="selected-products"></div>
+
+      <label for="lead-notes">Notes</label>
+      <textarea id="lead-notes" placeholder="Discussion notes, follow-up actions, etc." rows="3"></textarea>
+
+      <button type="submit" class="btn btn-primary btn-submit">Save Lead</button>
+    </form>
+
+    <!-- Recent Leads -->
+    <div id="recent-leads">
+      <h2>Recent Leads</h2>
+      <ul id="leads-list">
+        <li class="empty-state">No leads captured yet.</li>
+      </ul>
     </div>
   </div>
 
-  <!-- Processing Overlay -->
-  <div id="processing-overlay" class="modal hidden">
-    <div class="processing-content">
-      <div class="spinner"></div>
-      <p>Reading badge text...</p>
-    </div>
-  </div>
-
-  <!-- Review/Edit Form Modal -->
-  <div id="review-modal" class="modal hidden">
-    <div class="review-container">
-      <h2>Review Lead Info</h2>
-
-      <div id="line-picker" class="hidden">
-        <p class="picker-instructions">Select lines for <strong id="picker-target">Name</strong> <span class="picker-hint">(tap multiple if needed)</span></p>
-        <div id="picker-preview" class="picker-preview hidden"></div>
-        <div id="ocr-lines"></div>
-        <div class="picker-actions">
-          <button type="button" id="picker-skip" class="btn btn-secondary">Skip</button>
-          <button type="button" id="picker-next" class="btn btn-primary hidden">Next: Company</button>
-        </div>
-      </div>
-
-      <form id="lead-form">
-        <label for="lead-name">Name</label>
-        <input type="text" id="lead-name" placeholder="Attendee name" required>
-
-        <label for="lead-company">Company</label>
-        <input type="text" id="lead-company" placeholder="Company name">
-
-        <label for="lead-notes">Notes</label>
-        <textarea id="lead-notes" placeholder="Interest, follow-up action, etc." rows="3"></textarea>
-
-        <div class="form-actions">
-          <button type="button" id="review-cancel" class="btn btn-secondary">Cancel</button>
-          <button type="submit" class="btn btn-primary">Save Lead</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Hidden canvas for image capture -->
-  <canvas id="capture-canvas" class="hidden"></canvas>
-
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
